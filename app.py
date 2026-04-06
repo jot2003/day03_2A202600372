@@ -72,10 +72,16 @@ def observation_citation_markdown(tool: str, obs_raw: str) -> str:
         return f"**Nguon:** raw observation (khong parse JSON). Tool `{tool}`."
 
     if d.get("_demo") is True:
+        demo_url = d.get("public_weather_page_url")
+        demo_link = (
+            f" [Minh hoa: trang thoi tiet cung dia diem tren OpenWeather]({demo_url})"
+            if demo_url
+            else ""
+        )
         return (
-            "**Nguon (kiem chung):** Du lieu **MO PHONG** — `DEMO_TRAVEL_APIS=1` hoac thieu key OpenWeather/Amadeus. "
-            "Khong phai gia/weather thuc te. Ma nguon: `src/tools/demo_fallback.py`. "
-            "Tai lieu cau hinh: `.env.example` trong repo."
+            "**Nguon (kiem chung):** Du lieu **MO PHONG** trong tool — `DEMO_TRAVEL_APIS=1` hoac thieu key. "
+            f"Khong phai snapshot API that.{demo_link} "
+            "Ma: `src/tools/demo_fallback.py` — cau hinh: `.env.example`."
         )
     if d.get("error"):
         return (
@@ -83,6 +89,21 @@ def observation_citation_markdown(tool: str, obs_raw: str) -> str:
             f"{d.get('hint', '(xem huong dan trong JSON)')}"
         )
     if tool == "get_weather":
+        pub = d.get("public_weather_page_url")
+        cname = d.get("city") or ""
+        cc = d.get("country") or ""
+        if d.get("source") == "openweathermap.org/data/2.5" and pub:
+            wq = d.get("weather_query") or ""
+            return (
+                f"**Nguon (kiem chung nhanh):** [Thoi tiet hien tai tai {cname}, {cc} (OpenWeatherMap)]({pub}) "
+                f"— trang web cung dia diem voi API (`q` da dung: `{wq}`). "
+                "[Tai lieu ky thuat API](https://openweathermap.org/api) — key / loi 401: `docs/OPENWEATHER_SETUP_VI.md`."
+            )
+        if pub:
+            return (
+                f"**Nguon:** [Thoi tiet tai {cname}, {cc} (OpenWeatherMap)]({pub}) — "
+                "[API docs](https://openweathermap.org/api), ma: `src/tools/weather.py`."
+            )
         if d.get("source") == "openweathermap.org/data/2.5":
             return (
                 "**Nguon:** [OpenWeatherMap API](https://openweathermap.org/api) — endpoint `data/2.5/weather` + `forecast`. "
@@ -100,6 +121,35 @@ def observation_citation_markdown(tool: str, obs_raw: str) -> str:
         return "**Nguon:** Tinh toan cuc bo (Python), khong goi API ngoai — `src/tools/budget.py`."
 
     return f"**Nguon:** Ket qua tool `{tool}`; doi chieu voi ma trong `src/tools/`."
+
+
+def _render_agent_step(ev: dict) -> None:
+    """Hien thi mot su kien tu iter_run (Streamlit)."""
+    k = ev.get("kind")
+    if k == "start":
+        st.caption(f"Model: `{ev.get('model', '')}`")
+    elif k == "llm_step":
+        st.markdown(f"##### Buoc {ev.get('step', '')} — LLM")
+        st.code(ev.get("content") or "", language="markdown")
+    elif k == "parse_error":
+        st.warning(
+            f"Khong parse duoc Action o buoc {ev.get('step', '')} — agent se thu lai trong buoc tiep theo."
+        )
+        st.code(ev.get("content") or "", language="markdown")
+    elif k == "tool":
+        step = ev.get("step", "")
+        tool = ev.get("tool", "")
+        obs = ev.get("observation") or ""
+        st.markdown(f"##### Buoc {step} — Tool `{tool}`")
+        st.markdown(observation_citation_markdown(tool, obs))
+        try:
+            st.json(json.loads(obs))
+        except (json.JSONDecodeError, TypeError):
+            st.text(obs)
+    elif k == "final":
+        st.success(f"Final Answer (buoc {ev.get('step', '')})")
+    elif k == "max_steps":
+        st.error(ev.get("text") or "Max steps")
 
 
 def run_export_summaries() -> dict:
@@ -200,34 +250,60 @@ def main() -> None:
                 except Exception as e:
                     st.error(f"LLM: {e}")
                 else:
-                    with st.spinner("Dang xu ly..."):
-                        if mode == "chatbot":
+                    if mode == "chatbot":
+                        with st.spinner("Dang xu ly (chatbot)..."):
                             bot = TravelChatbotBaseline(llm)
                             answer = bot.reply(q)
-                            st.subheader("Tra loi (chatbot)")
-                            st.markdown(answer)
+                        st.subheader("Tra loi (chatbot)")
+                        st.markdown(answer)
+                    else:
+                        agent = ReActAgent(llm, get_tool_specs(), max_steps=int(max_steps))
+                        answer = ""
+                        status_ctx = getattr(st, "status", None)
+                        if status_ctx is not None:
+                            with st.status("Agent ReAct dang chay (streaming tung buoc)...", expanded=True) as status:
+                                for ev in agent.iter_run(q):
+                                    _render_agent_step(ev)
+                                    if ev.get("kind") == "final":
+                                        answer = ev.get("text") or ""
+                                        status.update(label="Hoan thanh", state="complete")
+                                    elif ev.get("kind") == "max_steps":
+                                        answer = ev.get("text") or ""
+                                        status.update(label="Dung sau so buoc toi da", state="error")
                         else:
-                            agent = ReActAgent(llm, get_tool_specs(), max_steps=int(max_steps))
-                            answer = agent.run(q)
-                            st.subheader("Ket qua (agent)")
-                            st.markdown(answer)
+                            trace_ph = st.empty()
+                            chunk: list = []
+                            for ev in agent.iter_run(q):
+                                chunk.append(ev)
+                                with trace_ph.container():
+                                    for e in chunk:
+                                        _render_agent_step(e)
+                                if ev.get("kind") == "final":
+                                    answer = ev.get("text") or ""
+                                elif ev.get("kind") == "max_steps":
+                                    answer = ev.get("text") or ""
 
-                            if agent.history:
-                                with st.expander("Trace ReAct + trich dan nguon moi buoc", expanded=True):
-                                    for h in agent.history:
-                                        st.markdown(f"##### Buoc {h['step']}")
-                                        st.markdown("**LLM (raw)**")
-                                        st.code(h.get("llm", "") or "", language="markdown")
-                                        if h.get("final"):
-                                            st.success("Co Final Answer trong khoi tren.")
-                                        if h.get("tool"):
-                                            st.markdown(f"**Tool:** `{h['tool']}`")
-                                            st.markdown(observation_citation_markdown(h["tool"], h.get("observation") or ""))
-                                            obs = h.get("observation") or ""
-                                            try:
-                                                st.json(json.loads(obs))
-                                            except (json.JSONDecodeError, TypeError):
-                                                st.text(obs)
+                        st.subheader("Ket qua (agent)")
+                        st.markdown(answer)
+
+                        if agent.history:
+                            with st.expander("Trace ReAct + trich dan nguon (tom tat)", expanded=False):
+                                for h in agent.history:
+                                    st.markdown(f"##### Buoc {h['step']}")
+                                    st.markdown("**LLM (raw)**")
+                                    st.code(h.get("llm", "") or "", language="markdown")
+                                    if h.get("final"):
+                                        st.success("Co Final Answer trong khoi tren.")
+                                    if h.get("tool"):
+                                        st.markdown(f"**Tool:** `{h['tool']}`")
+                                        st.markdown(
+                                            observation_citation_markdown(h["tool"], h.get("observation") or "")
+                                        )
+                                        obs = h.get("observation") or ""
+                                        try:
+                                            st.json(json.loads(obs))
+                                        except (json.JSONDecodeError, TypeError):
+                                            st.text(obs)
 
                     if auto_csv:
                         exp = run_export_summaries()
