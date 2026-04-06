@@ -204,6 +204,40 @@ def run_export_summaries() -> dict:
     return summarize_logs_to_csv(log_dir, out_dir, "*.log")
 
 
+def _render_answer_feedback(question: str, answer: str, mode: str) -> None:
+    """Nhan feedback ngay sau moi cau tra loi de phuc vu review nhanh."""
+    st.divider()
+    st.markdown("### Danh gia cau tra loi")
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        quick = st.radio(
+            "Danh gia nhanh",
+            options=["👍 Tot", "👎 Chua tot"],
+            horizontal=True,
+            key=f"quick_fb_{mode}",
+        )
+    with c2:
+        score = st.slider("Diem chat luong (1-5)", min_value=1, max_value=5, value=4, key=f"score_fb_{mode}")
+
+    note = st.text_area(
+        "Nhan xet chi tiet (tu chon)",
+        height=90,
+        key=f"note_fb_{mode}",
+        placeholder="Vi du: thong tin day du, can cu ro rang, hoac con thieu chi tiet...",
+    )
+    if st.button("Luu feedback cho cau tra loi nay", key=f"save_fb_{mode}"):
+        payload = (
+            f"- mode: {mode}\n"
+            f"- quick: {quick}\n"
+            f"- score_1_5: {score}\n"
+            f"- question: {question.strip()[:500]}\n"
+            f"- answer_preview: {(answer or '').strip()[:1500]}\n"
+            f"- note: {(note or '').strip()}\n"
+        )
+        p = append_feedback(ROOT, payload, context="Answer Review")
+        st.success(f"Da luu feedback: `{p.relative_to(ROOT)}`")
+
+
 def main() -> None:
     load_dotenv(ROOT / ".env", override=True)
 
@@ -302,6 +336,7 @@ def main() -> None:
                             answer = bot.reply(q)
                         st.subheader("Tra loi (chatbot)")
                         st.markdown(answer)
+                        _render_answer_feedback(q, answer, "chatbot")
                     else:
                         agent = ReActAgent(llm, get_tool_specs(), max_steps=int(max_steps))
                         answer = ""
@@ -331,6 +366,7 @@ def main() -> None:
 
                         st.subheader("Ket qua (agent)")
                         st.markdown(answer)
+                        _render_answer_feedback(q, answer, "agent")
 
                         if agent.history:
                             with st.expander("Trace ReAct + trich dan nguon (tom tat)", expanded=False):
