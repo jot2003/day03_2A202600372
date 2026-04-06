@@ -54,3 +54,26 @@ The code is designed as a **Production Prototype**. It includes:
 ---
 
 *Happy Coding! Let's build agents that actually work.*
+
+---
+
+## 📦 C401-E3 Submission Notes
+
+This repository is used as the team public submission for **Lab 3**.
+
+- Team: **C401-E3**
+- Public repo: [https://github.com/jot2003/Lab3__C401-E3](https://github.com/jot2003/Lab3__C401-E3)
+- Combined submission report:
+  - `report/Lab3__C401-E3.md`
+  - `report/Lab3__C401-E3.pdf`
+
+### What this submission contains
+
+- ReAct travel agent with streaming trace (`Thought -> Action -> Observation`).
+- Weather, one-way/roundtrip/itinerary flight, and budget tools.
+- Telemetry logs and CSV summaries for evaluation.
+- Group and personal report sections merged into one final `Lab3__...` report file.
+
+### Personal-score reminder
+
+Per lab requirement, each team member should have at least one commit in the team assignment repository.
