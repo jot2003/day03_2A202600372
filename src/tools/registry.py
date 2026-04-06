@@ -2,7 +2,7 @@ import json
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from src.tools.budget import calculate_travel_budget
-from src.tools.flights import search_flights
+from src.tools.flights import search_flights, search_itinerary_flights, search_roundtrip_flights
 from src.tools.weather import get_weather
 
 ToolFn = Callable[..., str]
@@ -10,6 +10,11 @@ ToolFn = Callable[..., str]
 _REGISTRY: Dict[str, Tuple[ToolFn, List[str]]] = {
     "get_weather": (get_weather, ["city"]),
     "search_flights": (search_flights, ["origin", "destination", "departure_date"]),
+    "search_roundtrip_flights": (
+        search_roundtrip_flights,
+        ["origin", "destination", "departure_date", "return_date"],
+    ),
+    "search_itinerary_flights": (search_itinerary_flights, ["segments_text"]),
     "calculate_travel_budget": (
         calculate_travel_budget,
         ["total_budget_vnd", "flight_cost_vnd", "hotel_per_night_vnd", "num_nights"],
@@ -35,9 +40,27 @@ def get_tool_specs() -> List[Dict[str, Any]]:
             "description": (
                 "Tìm vé máy bay (Duffel Air API). "
                 "origin, destination: mã IATA 3 chữ (HAN, DAD, SGN). "
-                "departure_date: YYYY-MM-DD (nên là ngày trong tương lai)."
+                "departure_date: ưu tiên YYYY-MM-DD, nhưng tool cũng hiểu today/tomorrow/ngay mai, "
+                "next monday, ngay nay tuan sau, cuoi tuan sau, dd/mm/yyyy."
             ),
             "args": ["origin", "destination", "departure_date"],
+        },
+        {
+            "name": "search_roundtrip_flights",
+            "description": (
+                "Tìm vé khứ hồi bằng 2 lượt tìm một chiều. "
+                "origin, destination là IATA; departure_date là ngày đi; return_date là ngày về. "
+                "Hỗ trợ ngày tự nhiên như tomorrow, next monday, ngay mai."
+            ),
+            "args": ["origin", "destination", "departure_date", "return_date"],
+        },
+        {
+            "name": "search_itinerary_flights",
+            "description": (
+                "Tìm vé cho tour nhiều chặng. segments_text nhận JSON list hoặc chuỗi: "
+                "'HAN-DAD:tomorrow; DAD-SGN:next monday; SGN-HAN:2026-05-20'."
+            ),
+            "args": ["segments_text"],
         },
         {
             "name": "calculate_travel_budget",
@@ -91,7 +114,20 @@ def _normalize_tool_arg_tokens(arg_string: str, param_names: List[str]) -> Tuple
     - positional: HAN, DAD, 2026-04-15
     - keyword: origin=HAN, destination=DAD, departure_date=2026-04-15
     """
-    parts = _split_args(arg_string) if arg_string.strip() else []
+    raw = arg_string.strip()
+    # Tool 1 tham số (vd: get_weather(city)) cho phép dấu phẩy trong giá trị:
+    # get_weather(Da Nang, VN) -> city = "Da Nang, VN"
+    if len(param_names) == 1:
+        if not raw:
+            return [], "empty arguments"
+        key = param_names[0]
+        if "=" in raw:
+            left, _, right = raw.partition("=")
+            if left.strip() == key:
+                return [right.strip()], None
+        return [raw], None
+
+    parts = _split_args(raw) if raw else []
     if not parts and not param_names:
         return [], None
     if not parts:

@@ -112,9 +112,21 @@ def observation_citation_markdown(tool: str, obs_raw: str) -> str:
         return (
             "**Nguon:** [OpenWeatherMap](https://openweathermap.org/api) — xem `src/tools/weather.py`."
         )
-    if tool == "search_flights":
+    if tool in {"search_flights", "search_roundtrip_flights", "search_itinerary_flights"}:
         req_id = d.get("duffel_offer_request_id")
         req_url = d.get("duffel_offer_request_url")
+        if not req_url and tool == "search_roundtrip_flights":
+            out_r = d.get("outbound") or {}
+            in_r = d.get("inbound") or {}
+            req_url = out_r.get("duffel_offer_request_url") or in_r.get("duffel_offer_request_url")
+            req_id = out_r.get("duffel_offer_request_id") or in_r.get("duffel_offer_request_id")
+        if not req_url and tool == "search_itinerary_flights":
+            for leg in d.get("legs") or []:
+                rr = (leg.get("result") or {})
+                req_url = rr.get("duffel_offer_request_url")
+                req_id = rr.get("duffel_offer_request_id")
+                if req_url:
+                    break
         req_info = f" (offer_request_id: `{req_id}`)" if req_id else ""
         realtime = (
             f"[Du lieu realtime cua lan tim nay]({req_url}) (can `Authorization: Bearer ...` de xem JSON)"

@@ -69,7 +69,23 @@ def mock_flights(origin: str, destination: str, departure_date: str) -> str:
                 "departure_at": f"{departure_date}T06:00:00",
                 "arrival_at": f"{departure_date}T07:15:00",
                 "carrier_code": "VJ",
+                "carrier_name": "VietJet Air (demo)",
+                "flight_number": "VJ123 (demo)",
+                "aircraft": {"name": "Airbus A320 (demo)", "iata_code": "320"},
                 "number_of_stops": 0,
+                "segments": [
+                    {
+                        "origin": origin,
+                        "destination": destination,
+                        "departing_at": f"{departure_date}T06:00:00",
+                        "arriving_at": f"{departure_date}T07:15:00",
+                        "duration": "PT1H15M",
+                        "marketing_carrier": {"name": "VietJet Air (demo)", "iata_code": "VJ"},
+                        "operating_carrier": {"name": "VietJet Air (demo)", "iata_code": "VJ"},
+                        "flight_number": {"marketing": "123", "operating": "123"},
+                        "aircraft": {"name": "Airbus A320 (demo)", "iata_code": "320"},
+                    }
+                ],
             },
             {
                 "price": "1890000",
@@ -77,7 +93,23 @@ def mock_flights(origin: str, destination: str, departure_date: str) -> str:
                 "departure_at": f"{departure_date}T08:30:00",
                 "arrival_at": f"{departure_date}T09:45:00",
                 "carrier_code": "VN",
+                "carrier_name": "Vietnam Airlines (demo)",
+                "flight_number": "VN456 (demo)",
+                "aircraft": {"name": "Airbus A321 (demo)", "iata_code": "321"},
                 "number_of_stops": 0,
+                "segments": [
+                    {
+                        "origin": origin,
+                        "destination": destination,
+                        "departing_at": f"{departure_date}T08:30:00",
+                        "arriving_at": f"{departure_date}T09:45:00",
+                        "duration": "PT1H15M",
+                        "marketing_carrier": {"name": "Vietnam Airlines (demo)", "iata_code": "VN"},
+                        "operating_carrier": {"name": "Vietnam Airlines (demo)", "iata_code": "VN"},
+                        "flight_number": {"marketing": "456", "operating": "456"},
+                        "aircraft": {"name": "Airbus A321 (demo)", "iata_code": "321"},
+                    }
+                ],
             },
         ],
         "route": f"{origin}→{destination}",

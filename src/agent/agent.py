@@ -60,7 +60,9 @@ Final Answer: clear answer for the user (can be in Vietnamese).
 Rules:
 - Use only these tool names: {", ".join(t["name"] for t in self.tools)}.
 - Action line may use EITHER positional args (a, b, c) OR keyword args (a=x, b=y, c=z) matching the tool parameter names exactly.
-- For search_flights use IATA airport codes: HAN (Hanoi), DAD (Da Nang), SGN (Ho Chi Minh City).
+- For all flight tools (`search_flights`, `search_roundtrip_flights`, `search_itinerary_flights`) use IATA airport codes: HAN (Hanoi), DAD (Da Nang), SGN (Ho Chi Minh City).
+- Use `search_roundtrip_flights` when the user asks for round-trip tickets.
+- Use `search_itinerary_flights` when the user asks for a multi-city tour (2+ legs).
 - For get_weather(city): map place names from the user's question to a normal query, e.g. "Da Nang, Vietnam" → `get_weather(Da Nang, VN)` or `get_weather(Da Nang)`. OpenWeather accepts "City, CC" style; there is no special problem with commas in the tool argument.
 - If the user's question is in English (no Vietnamese diacritics), still call get_weather — do not blame "Unicode", "accents", or "commas in the city string" unless Observation literally contains that error from the API (it usually will not).
 - Do NOT invent fake API limitations — use the tool and read Observation. If Observation is a success JSON with temp/description, your Final Answer must use that data. If Observation shows error JSON, explain only what that JSON says (e.g. missing key, 404, network).
