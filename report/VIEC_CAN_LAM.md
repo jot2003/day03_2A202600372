@@ -29,19 +29,19 @@
 - [x] **Agent v1 vs v2** (mô tả thay đổi: prompt, parse `Action`, demo/API, retry Gemini, resolve model…).
 - [x] **Hai trace**: một **thành công**, một **thất bại** (parse / 429 / thiếu key) — trích `logs/` hoặc Discord.
 - [x] Bảng **Chatbot vs Agent** (đúng/sai hoặc chất lượng câu trả lời + token/latency từ CSV).
-- [ ] Flowchart + insight nhóm.
+- [x] Flowchart + insight nhóm.
 - [x] RCA ngắn (1 case failure).
 
 ## D. Discord / lớp
 
-- [ ] Post trace Thought → Action → Observation, **≥ 3 bước**, ghi tool + tham số + Observation.
+- [x] Post trace Thought → Action → Observation, **≥ 3 bước**, ghi tool + tham số + Observation.
 
 ## E. Báo cáo cá nhân (`report/individual_reports/REPORT_[HO_TEN].md`)
 
-- [ ] I. Đóng góp code (file cụ thể).
-- [ ] II. Một **debug case** có trích log.
-- [ ] III. Insight Chatbot vs ReAct (3 câu hỏi template).
-- [ ] IV. Hướng phát triển production.
+- [x] I. Đóng góp code (file cụ thể).
+- [x] II. Một **debug case** có trích log.
+- [x] III. Insight Chatbot vs ReAct (3 câu hỏi template).
+- [x] IV. Hướng phát triển production.
 
 ## F. Bonus (tùy thời gian)
 
@@ -54,4 +54,5 @@
 Ghi chú hiện trạng:
 - Đã tổng hợp lại số liệu CSV bằng `python scripts/summarize_logs.py` (mới nhất).
 - Báo cáo nhóm đã cập nhật lại phần Telemetry và Success Rate theo dữ liệu mới.
-- Mục Discord và flowchart nhóm cần hoàn tất thủ công trước khi nộp.
+- Đã hoàn tất Discord trace và flowchart/insight.
+- Nộp theo format report tổng: `report/Lab3__C401-E3.md` và `report/Lab3__C401-E3.pdf`.
