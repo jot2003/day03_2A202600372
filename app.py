@@ -311,7 +311,7 @@ def main() -> None:
                 f"- [{r['label']}]({r['url']})" for r in selected_preset.get("references", [])
             )
             if refs_md:
-            st.markdown("**Tài liệu kiểm chứng (ngoài repo):** " + refs_md)
+                st.markdown("**Tài liệu kiểm chứng (ngoài repo):** " + refs_md)
 
         st.subheader("Nội dung sẽ gửi cho LLM")
         question = st.text_area(

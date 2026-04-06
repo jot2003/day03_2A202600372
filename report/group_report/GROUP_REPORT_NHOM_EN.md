@@ -1,6 +1,6 @@
 # Group Report: Lab 3 - Production-Grade Agentic System
 
-- **Team Name**: Nhom Lab 3 (Travel Agent)
+- **Team Name**: C401-E3
 - **Team Members**: Hoang Kim Tri Thanh (2A202600372), Dang Dinh Tu Anh (2A202600019), Quach Gia Duoc (2A202600423), Pham Quoc Dung (2A202600490), Nguyen Thanh Nam (2A202600205)
 - **Deployment Date**: 2026-04-06
 
@@ -11,8 +11,8 @@
 The project goal is to build a ReAct travel assistant that solves multi-step queries (weather, flights, budget) and compare it against a chatbot baseline.
 
 - **Success Rate**:
-  - Agent: 42/43 sessions reached a valid `final_answer` (~97.7%).
-  - Chatbot: 2/2 sessions returned an answer (100%).
+  - Agent: 55/56 sessions reached a valid `final_answer` (~98.2%).
+  - Chatbot: 4/4 sessions returned an answer (100%).
 - **Key Outcome**: The agent handles complex travel planning (round-trip, multi-leg itinerary, natural-language dates) with tool-backed evidence and citations.
 
 ---
@@ -28,6 +28,11 @@ The system follows a Thought -> Action -> Observation loop:
 4. The loop continues until `Final Answer` or `max_steps`.
 
 In Streamlit, step events are streamed live to show agent progress during demos.
+
+### 2.1.1 Team Contribution Split (final)
+- Hoang Kim Tri Thanh: weather module (`get_weather`), weather evidence links, and weather reliability fixes.
+- Dang Dinh Tu Anh: flight module (`search_flights`, roundtrip/itinerary), argument parsing, and flight citation improvements.
+- Other members: agent loop, testing/telemetry, and report packaging.
 
 ### 2.2 Tool Definitions (Inventory)
 | Tool Name | Input Format | Use Case |
@@ -48,11 +53,12 @@ In Streamlit, step events are streamed live to show agent progress during demos.
 
 Data source: `report/exports/*.csv`, aggregated from `logs/`.
 
-- **Average Latency (P50)**: ~14,757.0 ms/session (agent).
+- **Evaluation Sessions**: 60 total sessions (56 agent, 4 chatbot).
+- **Average Latency (P50)**: ~15,316.5 ms/session (agent).
 - **Max Latency (P99)**: slowest observed session ~82,272 ms.
 - **Average Tokens per Task**:
-  - Agent: ~9,946.8 prompt tokens/session.
-  - Chatbot: ~313.5 prompt tokens/session.
+  - Agent: ~11,751.2 prompt tokens/session.
+  - Chatbot: ~314.2 prompt tokens/session.
 - **Total Cost of Test Suite**: estimated via `cost_estimate` in exported metrics; rises with loop/tool depth.
 
 Quick reading: chatbot is cheaper in tokens, while the agent is stronger on factual multi-step tasks due to tool grounding.
@@ -61,7 +67,16 @@ Quick reading: chatbot is cheaper in tokens, while the agent is stronger on fact
 
 ## 4. Root Cause Analysis (RCA) - Failure Traces
 
-### Case Study: Tool-argument parsing failures
+### Case Study (Success Trace): Multi-step weather + flight + budget
+- **Input**: A combined query (HAN -> DAD + weather + budget check).
+- **Trace Summary**:
+  - `Thought/Action 1`: call `get_weather(Da Nang, VN)`.
+  - `Thought/Action 2`: call `search_flights(HAN, DAD, 2026-04-15)`.
+  - `Thought/Action 3`: call `calculate_travel_budget(...)`.
+  - `Final Answer`: conclude budget feasibility from real tool observations.
+- **Outcome**: The agent reached `final_answer` with a complete evidence chain.
+
+### Case Study (Failure): Tool-argument parsing failures
 - **Input**: `get_weather(Da Nang, VN)` and `search_flights(origin='SGN', destination='HAN', departure_date='2026-05-10')`
 - **Observation**:
   - Weather failed with `expected 1 args, got 2` when city contained a comma.
@@ -87,6 +102,39 @@ Quick reading: chatbot is cheaper in tokens, while the agent is stronger on fact
 | :--- | :--- | :--- | :--- |
 | Simple Q | Fast but generic | Tool-backed answer with citations | **Agent** |
 | Multi-step | Often misses steps or evidence | Structured weather/flights/budget chain with trace | **Agent** |
+
+---
+
+## 5.1 Flowchart & Group Insights
+
+### System Flowchart (demo-level summary)
+
+```text
+User asks a travel question
+        |
+        v
+LLM creates Thought + chooses Action
+        |
+        v
+Run exactly one tool per step
+  - get_weather
+  - search_flights / roundtrip / itinerary
+  - calculate_travel_budget
+        |
+        v
+Receive Observation (JSON)
+        |
+        v
+If enough data -> Final Answer
+Else -> continue next Thought/Action loop
+```
+
+### Group Insights
+
+- **Insight 1 - Trust comes from evidence**: step-level traces plus clickable citations significantly improve user confidence.
+- **Insight 2 - Tool design drives quality**: argument parsing and input normalization (city/date) directly affect success rate.
+- **Insight 3 - Practical defaults matter**: defaulting to one-way unless explicit round-trip intent reduces demo-time logic errors.
+- **Insight 4 - Realtime data requires resilient fallback**: crawl/API can return empty results for some routes/dates; transparent fallback is essential.
 
 ---
 

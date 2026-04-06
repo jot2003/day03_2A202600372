@@ -50,8 +50,9 @@ def main() -> None:
     table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 13px; }
     th, td { border: 1px solid #d1d5db; padding: 8px; vertical-align: top; }
     th { background: #f3f4f6; }
-    code { background: #f3f4f6; padding: 2px 4px; border-radius: 4px; }
-    pre { background: #111827; color: #f9fafb; padding: 10px; border-radius: 6px; overflow-x: auto; }
+    code { background: #eef2ff; color: #111827; padding: 2px 4px; border-radius: 4px; }
+    pre { background: #f8fafc; color: #111827; border: 1px solid #d1d5db; padding: 10px; border-radius: 6px; overflow-x: auto; }
+    pre code { background: transparent; color: #111827; }
     blockquote { border-left: 4px solid #9ca3af; margin: 10px 0; padding-left: 10px; color: #4b5563; }
     ul, ol { margin-left: 20px; }
     @page { size: A4; margin: 18mm 14mm; }
