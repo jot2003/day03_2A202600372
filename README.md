@@ -67,6 +67,12 @@ This repository is used as the team public submission for **Lab 3**.
   - `report/Lab3__C401-E3.md`
   - `report/Lab3__C401-E3.pdf`
 
+### Clarification about repository timeline
+
+- The implementation work was started earlier on a cloned working repository.
+- The current fork-style submission repository (`Lab3__C401-E3`) was created later to align with the final submission format requirements.
+- Code, reports, and commits were synchronized to this public repository before submission.
+
 ### What this submission contains
 
 - ReAct travel agent with streaming trace (`Thought -> Action -> Observation`).
