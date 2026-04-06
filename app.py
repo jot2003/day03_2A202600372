@@ -113,16 +113,41 @@ def observation_citation_markdown(tool: str, obs_raw: str) -> str:
             "**Nguon:** [OpenWeatherMap](https://openweathermap.org/api) — xem `src/tools/weather.py`."
         )
     if tool in {"search_flights", "search_roundtrip_flights", "search_itinerary_flights"}:
+        src = d.get("source")
+        if src == "fast_flights_crawl":
+            curl = d.get("crawl_source_url")
+            crawl_link = f"[Trang du lieu crawl]({curl})" if curl else "Khong co crawl_source_url."
+            return (
+                f"**Nguon (uu tien crawl):** {crawl_link}. "
+                "[Thu vien fast-flights](https://pypi.org/project/fast-flights/) "
+                "(co the lech nhe theo thoi diem crawl)."
+            )
         req_id = d.get("duffel_offer_request_id")
         req_url = d.get("duffel_offer_request_url")
         if not req_url and tool == "search_roundtrip_flights":
             out_r = d.get("outbound") or {}
             in_r = d.get("inbound") or {}
+            # Prioritize crawl citation if any leg uses crawl mode
+            if (out_r.get("source") == "fast_flights_crawl") or (in_r.get("source") == "fast_flights_crawl"):
+                first = out_r if out_r.get("source") == "fast_flights_crawl" else in_r
+                curl = first.get("crawl_source_url")
+                crawl_link = f"[Trang du lieu crawl]({curl})" if curl else "Khong co crawl_source_url."
+                return (
+                    f"**Nguon (uu tien crawl):** {crawl_link}. "
+                    "[Thu vien fast-flights](https://pypi.org/project/fast-flights/)."
+                )
             req_url = out_r.get("duffel_offer_request_url") or in_r.get("duffel_offer_request_url")
             req_id = out_r.get("duffel_offer_request_id") or in_r.get("duffel_offer_request_id")
         if not req_url and tool == "search_itinerary_flights":
             for leg in d.get("legs") or []:
                 rr = (leg.get("result") or {})
+                if rr.get("source") == "fast_flights_crawl":
+                    curl = rr.get("crawl_source_url")
+                    crawl_link = f"[Trang du lieu crawl]({curl})" if curl else "Khong co crawl_source_url."
+                    return (
+                        f"**Nguon (uu tien crawl):** {crawl_link}. "
+                        "[Thu vien fast-flights](https://pypi.org/project/fast-flights/)."
+                    )
                 req_url = rr.get("duffel_offer_request_url")
                 req_id = rr.get("duffel_offer_request_id")
                 if req_url:

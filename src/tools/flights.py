@@ -6,6 +6,12 @@ from typing import Any, Dict, List, Tuple
 import unicodedata
 
 import requests
+try:
+    from fast_flights import FlightData as CrawlFlightData, Passengers as CrawlPassengers, get_flights as crawl_get_flights
+except Exception:  # optional dependency
+    CrawlFlightData = None
+    CrawlPassengers = None
+    crawl_get_flights = None
 
 from src.tools.demo_fallback import demo_travel_apis_enabled, mock_flights
 
@@ -14,7 +20,24 @@ DUFFEL_VERSION = os.getenv("DUFFEL_API_VERSION", "v2")
 
 
 def _duffel_token() -> str:
-    return os.getenv("DUFFEL_ACCESS_TOKEN", "").strip()
+    # Backward-compatible: accept both new and old env var names.
+    return (
+        os.getenv("DUFFEL_ACCESS_TOKEN", "").strip()
+        or os.getenv("DUFFEL_API_TOKEN", "").strip()
+    )
+
+
+def _flight_search_mode() -> str:
+    """
+    crawl_first (default): try crawl first then Duffel.
+    crawl: crawl only.
+    api_first: Duffel first then crawl.
+    api: Duffel only.
+    """
+    mode = os.getenv("FLIGHT_SEARCH_METHOD", "crawl_first").strip().lower()
+    if mode in {"crawl", "crawl_first", "api", "api_first"}:
+        return mode
+    return "crawl_first"
 
 
 def _extract_duffel_offers(body: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -242,6 +265,70 @@ def _normalize_departure_date(raw: str) -> Dict[str, Any]:
     return out
 
 
+def _search_flights_crawl(origin: str, destination: str, departure_date: str) -> Dict[str, Any]:
+    if crawl_get_flights is None or CrawlFlightData is None or CrawlPassengers is None:
+        return {
+            "ok": False,
+            "error": "Fast-flights crawler is unavailable",
+            "detail": "Install package `fast-flights` to enable crawl mode.",
+        }
+    try:
+        flight_data = [
+            CrawlFlightData(date=departure_date, from_airport=origin, to_airport=destination),
+        ]
+        result = crawl_get_flights(
+            flight_data=flight_data,
+            trip="one-way",
+            passengers=CrawlPassengers(adults=1),
+            seat="economy",
+            fetch_mode="common",
+            max_stops=2,
+        )
+        raw_flights = list(getattr(result, "flights", []) or [])
+        offers = []
+        for f in raw_flights[:8]:
+            fd = getattr(f, "__dict__", {})
+            price = str(fd.get("price") or "").replace(",", "").replace(" ", "")
+            # keep digits + dot only
+            price_num = re.sub(r"[^0-9.]", "", price)
+            offers.append(
+                {
+                    "price": price_num or None,
+                    "currency": "VND",
+                    "departure_at": fd.get("departure"),
+                    "arrival_at": fd.get("arrival"),
+                    "carrier_code": None,
+                    "carrier_name": fd.get("name"),
+                    "flight_number": None,
+                    "aircraft": {"name": None, "iata_code": None},
+                    "operating_carrier": {"name": fd.get("name"), "iata_code": None},
+                    "number_of_stops": fd.get("stops"),
+                    "duration": fd.get("duration"),
+                    "arrival_time_ahead": fd.get("arrival_time_ahead"),
+                    "delay": fd.get("delay"),
+                    "is_best": fd.get("is_best"),
+                    "segments": [],
+                }
+            )
+        if not offers:
+            return {
+                "ok": True,
+                "offers": [],
+                "source": "fast_flights_crawl",
+                "crawl_source_url": f"https://www.google.com/travel/flights?hl=en#flt={origin}.{destination}.{departure_date}",
+                "note": "Crawler returned no offers.",
+            }
+        return {
+            "ok": True,
+            "offers": offers,
+            "source": "fast_flights_crawl",
+            "crawl_source_url": f"https://www.google.com/travel/flights?hl=en#flt={origin}.{destination}.{departure_date}",
+            "note": None,
+        }
+    except Exception as e:
+        return {"ok": False, "error": "Fast-flights crawl failed", "detail": str(e)}
+
+
 def search_flights(origin: str, destination: str, departure_date: str) -> str:
     """
     Duffel Air API: IATA codes (e.g. HAN, DAD, SGN), departure_date YYYY-MM-DD.
@@ -264,28 +351,91 @@ def search_flights(origin: str, destination: str, departure_date: str) -> str:
             ensure_ascii=False,
         )
 
+    demo_enabled = demo_travel_apis_enabled()
+    mode = _flight_search_mode()
+    crawl_first = mode in {"crawl_first", "crawl"}
+    api_first = mode in {"api_first", "api"}
+
+    def _with_date_meta(payload: Dict[str, Any]) -> str:
+        payload["departure_date_input"] = departure_date_raw
+        payload["departure_date_normalized"] = departure_date
+        payload["departure_date_candidates"] = date_parse.get("candidates") or []
+        payload["departure_date_ambiguous"] = bool(date_parse.get("ambiguous"))
+        payload["departure_date_note"] = date_parse.get("note")
+        return json.dumps(payload, ensure_ascii=False)
+
+    def _demo_with_meta(reason: str) -> str:
+        raw_demo = mock_flights(origin, destination, departure_date)
+        try:
+            d = json.loads(raw_demo)
+            if isinstance(d, dict):
+                d["fallback_reason"] = reason
+                return _with_date_meta(d)
+        except Exception:
+            pass
+        return raw_demo
+
+    if crawl_first:
+        crawl_res = _search_flights_crawl(origin, destination, departure_date)
+        if crawl_res.get("ok"):
+            offers = crawl_res.get("offers") or []
+            return _with_date_meta(
+                {
+                    "offers": offers,
+                    "source": "fast_flights_crawl",
+                    "crawl_source_url": crawl_res.get("crawl_source_url"),
+                    "crawl_note": crawl_res.get("note"),
+                }
+            )
+        if mode == "crawl":
+            if demo_enabled:
+                return _demo_with_meta("Crawl failed; using demo fallback because DEMO_TRAVEL_APIS=1")
+            return _with_date_meta(
+                {
+                    "error": crawl_res.get("error", "Fast-flights crawl failed"),
+                    "detail": crawl_res.get("detail"),
+                    "hint": "Set FLIGHT_SEARCH_METHOD=crawl_first to fallback to Duffel API.",
+                    "source": "fast_flights_crawl",
+                }
+            )
+
     token = _duffel_token()
-    if not token:
-        if demo_travel_apis_enabled():
-            raw_demo = mock_flights(origin, destination, departure_date)
-            try:
-                d = json.loads(raw_demo)
-                if isinstance(d, dict):
-                    d["departure_date_input"] = departure_date_raw
-                    d["departure_date_normalized"] = departure_date
-                    d["departure_date_candidates"] = date_parse.get("candidates") or []
-                    d["departure_date_ambiguous"] = bool(date_parse.get("ambiguous"))
-                    d["departure_date_note"] = date_parse.get("note")
-                    return json.dumps(d, ensure_ascii=False)
-            except Exception:
-                pass
-            return raw_demo
-        return json.dumps(
+    if not token and api_first:
+        # api/api_first but no token -> optional fallback to crawl if api_first only
+        if mode == "api_first":
+            crawl_res = _search_flights_crawl(origin, destination, departure_date)
+            if crawl_res.get("ok"):
+                return _with_date_meta(
+                    {
+                        "offers": crawl_res.get("offers") or [],
+                        "source": "fast_flights_crawl",
+                        "crawl_source_url": crawl_res.get("crawl_source_url"),
+                        "crawl_note": crawl_res.get("note"),
+                    }
+                )
+        if demo_enabled:
+            return _demo_with_meta("API token missing; using demo fallback because DEMO_TRAVEL_APIS=1")
+        return _with_date_meta(
             {
                 "error": "Missing DUFFEL_ACCESS_TOKEN",
-                "hint": "https://duffel.com/docs/api/overview — hoặc DEMO_TRAVEL_APIS=1 trong .env để demo không cần Duffel.",
-            },
-            ensure_ascii=False,
+                "hint": (
+                    "Set DUFFEL_ACCESS_TOKEN (or DUFFEL_API_TOKEN), "
+                    "or use FLIGHT_SEARCH_METHOD=crawl_first with fast-flights installed."
+                ),
+            }
+        )
+    if not token:
+        # crawl_first reached here only when crawl failed
+        if demo_enabled:
+            return _demo_with_meta("Crawl failed and API token missing; using demo fallback")
+        return _with_date_meta(
+            {
+                "error": "Missing DUFFEL_ACCESS_TOKEN",
+                "hint": (
+                    "Crawl mode failed and API token is missing. "
+                    "Set DUFFEL_ACCESS_TOKEN (or DUFFEL_API_TOKEN) or install/repair fast-flights."
+                ),
+            }
         )
 
     headers = {
@@ -311,19 +461,44 @@ def search_flights(origin: str, destination: str, departure_date: str) -> str:
     try:
         r = requests.post(DUFFEL_OFFER_REQUEST_URL, headers=headers, json=payload, timeout=30)
         if r.status_code >= 400:
-            return json.dumps(
+            details = None
+            try:
+                err_json = r.json()
+                if isinstance(err_json, dict):
+                    details = [
+                        {
+                            "field": (((e.get("source") or {}).get("field")) if isinstance(e, dict) else ""),
+                            "message": (
+                                (e.get("message") or e.get("title") or "")
+                                if isinstance(e, dict)
+                                else ""
+                            ),
+                            "code": (e.get("code") or "") if isinstance(e, dict) else "",
+                        }
+                        for e in (err_json.get("errors") or [])
+                    ]
+            except ValueError:
+                details = None
+            if demo_enabled:
+                return _demo_with_meta(f"Duffel API returned HTTP {r.status_code}; using demo fallback")
+            return _with_date_meta(
                 {
                     "error": "Duffel flight search failed",
                     "status": r.status_code,
                     "body": r.text[:3000],
-                },
-                ensure_ascii=False,
+                    "validation_errors": details,
+                    "source": "duffel",
+                }
             )
         body = r.json()
     except requests.RequestException as e:
-        return json.dumps({"error": "Duffel request failed", "detail": str(e)}, ensure_ascii=False)
+        if demo_enabled:
+            return _demo_with_meta(f"Duffel request exception ({e}); using demo fallback")
+        return _with_date_meta({"error": "Duffel request failed", "detail": str(e), "source": "duffel"})
     except ValueError:
-        return json.dumps({"error": "Duffel response is not valid JSON", "body": r.text[:1000]}, ensure_ascii=False)
+        if demo_enabled:
+            return _demo_with_meta("Duffel response parse failed; using demo fallback")
+        return _with_date_meta({"error": "Duffel response is not valid JSON", "body": r.text[:1000], "source": "duffel"})
 
     raw_offers = _extract_duffel_offers(body)
     offers = []
@@ -371,34 +546,22 @@ def search_flights(origin: str, destination: str, departure_date: str) -> str:
     resource_url = _offer_request_resource_url(offer_request_id)
 
     if not offers:
-        return json.dumps(
+        return _with_date_meta(
             {
                 "message": "No offers returned for this route/date.",
-                "departure_date_input": departure_date_raw,
-                "departure_date_normalized": departure_date,
-                "departure_date_candidates": date_parse.get("candidates") or [],
-                "departure_date_ambiguous": bool(date_parse.get("ambiguous")),
-                "departure_date_note": date_parse.get("note"),
                 "duffel_offer_request_id": offer_request_id,
                 "duffel_offer_request_url": resource_url or None,
                 "source": "duffel",
-            },
-            ensure_ascii=False,
+            }
         )
 
-    return json.dumps(
+    return _with_date_meta(
         {
             "offers": offers,
-            "departure_date_input": departure_date_raw,
-            "departure_date_normalized": departure_date,
-            "departure_date_candidates": date_parse.get("candidates") or [],
-            "departure_date_ambiguous": bool(date_parse.get("ambiguous")),
-            "departure_date_note": date_parse.get("note"),
             "duffel_offer_request_id": offer_request_id,
             "duffel_offer_request_url": resource_url or None,
             "source": "duffel",
-        },
-        ensure_ascii=False,
+        }
     )
 
 
