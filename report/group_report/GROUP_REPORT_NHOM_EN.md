@@ -146,5 +146,13 @@ Else -> continue next Thought/Action loop
 
 ---
 
+## 7. Future Improvements
+- Add caching for repeated weather and flight lookups to reduce latency and token cost.
+- Improve tool fallback logic with clearer retry policies when external APIs return empty or inconsistent results.
+- Expand evaluation coverage with more multi-city, date-flexible, and edge-case travel queries.
+- Strengthen trace quality by adding richer step-level reasoning summaries and error classification.
+- Prepare deployment hardening with secrets management, rate limiting, and better monitoring for production use.
+
+
 > [!NOTE]
 > Submit this report by renaming it to `GROUP_REPORT_[TEAM_NAME].md` and placing it in this folder.
